@@ -52,7 +52,7 @@ class Graph_Directed_A(nn.Module):
 # A for Uni-directed graphs:
 class Graph_Uni_Directed_A(nn.Module):
     def __init__(self, n_nodes, window_size, alpha, k, device):
-        super(Graph_Directed_A, self).__init__()
+        super(Graph_Uni_Directed_A, self).__init__()
         self.alpha = alpha
         self.k = k
         self.device = device
@@ -78,7 +78,7 @@ class Graph_Uni_Directed_A(nn.Module):
 # A for Undirected graphs:
 class Graph_Undirected_A(nn.Module):
     def __init__(self, n_nodes, window_size, alpha, k, device):
-        super(Graph_Directed_A, self).__init__()
+        super(Graph_Undirected_A, self).__init__()
         self.alpha = alpha
         self.k = k
         self.device = device

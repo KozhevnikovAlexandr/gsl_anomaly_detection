@@ -24,6 +24,7 @@ class ForecastFDDDataloader:
             device: str = 'cpu',
             disable_index: bool = False,
     ) -> None:
+        self.dataframe = dataframe
         if dataframe.index.names != ['run_id', 'sample']:
             raise ValueError("``dataframe`` must have multi-index ('run_id', 'sample')")
         if not np.all(dataframe.index == mask.index):

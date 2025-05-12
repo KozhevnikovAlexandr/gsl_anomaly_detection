@@ -14,16 +14,18 @@ from transformer import TimeSeriesTransformerGSL
 def parse_args():
     parser = argparse.ArgumentParser(description='Train transformer+GSL model for time series forecasting')
     parser.add_argument('--dataset', type=str, default='reinartz_tep')
-    parser.add_argument('--n_epochs', type=int, default=40)
+    parser.add_argument('--n_epochs', type=int, default=80)
     parser.add_argument('--window_size', type=int, default=100)
     parser.add_argument('--step_size', type=int, default=1)
-    parser.add_argument('--batch_size', type=int, default=256)
+    parser.add_argument('--batch_size', type=int, default=512)
     parser.add_argument('--d_model', type=int, default=128)
     parser.add_argument('--nhead', type=int, default=8)
     parser.add_argument('--num_layers', type=int, default=2)
-    parser.add_argument('--dim_feedforward', type=int, default=64)
-    parser.add_argument('--dropout', type=float, default=0.1)
+    parser.add_argument('--dim_feedforward', type=int, default=128)
+    parser.add_argument('--dropout', type=float, default=0.2)
     parser.add_argument('--lr', type=float, default=0.001)
+    parser.add_argument('--n_gnn', type=int, default=1)
+    parser.add_argument('--n_hidden', type=int, default=256)
     parser.add_argument('--gsl_k', type=int, default=5, help='Top-k для GSL')
     parser.add_argument('--name', type=str, default='transformer_gsl')
     return parser.parse_args()
@@ -61,6 +63,8 @@ def train():
                                      dim_feedforward=args.dim_feedforward,
                                      dropout=args.dropout,
                                      gsl_k=args.gsl_k,
+                                     n_gnn=args.n_gnn,
+                                    n_hidden=args.n_hidden,
                                      device=device)
     model.to(device)
     optimizer = Adam(model.parameters(), lr=args.lr)

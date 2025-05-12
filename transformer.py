@@ -3,16 +3,20 @@ import torch.nn as nn
 import torch.nn.functional as F
 from gsl import GSL
 
-# class GraphConvolution(nn.Module):
+class GCLayer(nn.Module):
+    """
+    Graph convolution layer.
+    """
+    def __init__(self, in_dim, out_dim):
+        super().__init__()
+        self.dense = nn.Linear(in_dim, out_dim)
 
-#     def __init__(self, in_features, out_features, bias=True):
-#         super(GraphConvolution, self).__init__()
-#         self.linear = nn.Linear(in_features, out_features, bias=bias)
-    
-#     def forward(self, x, adj):
-#         out = torch.matmul(adj, x)  # (B, N, in)
-#         out = self.linear(out)      # (B, N, out)
-#         return out
+    def forward(self, adj, X):
+        adj = adj + torch.eye(adj.size(0)).to(adj.device)
+        h = self.dense(X)
+        norm = adj.sum(1)**(-1/2)
+        h = norm[None, :] * adj * norm[:, None] @ h
+        return h
 
 class MultiHeadSelfAttention(nn.Module):
     def __init__(self, d_model, nhead, dropout=0.1):
@@ -78,8 +82,10 @@ class TransformerBlock(nn.Module):
 
 class TimeSeriesTransformerGSL(nn.Module):
     def __init__(self, ts_dim, window_size, d_model=64, nhead=4, num_layers=2, 
-                 dim_feedforward=128, dropout=0.1, gsl_k=None, gsl_alpha=1.0, device='cpu'):
-        super(TimeSeriesTransformerGSL, self).__init__()
+                 dim_feedforward=128, dropout=0.1, 
+                 gsl_k=None, gsl_alpha=1.0, 
+                 n_gnn=1, n_hidden=1024, device='cpu'):
+        super().__init__()
         self.ts_dim = ts_dim
         self.window_size = window_size
         self.device = device
@@ -90,38 +96,62 @@ class TimeSeriesTransformerGSL(nn.Module):
             TransformerBlock(d_model, nhead, dim_feedforward, dropout)
             for _ in range(num_layers)
         ])
-        self.graph_proj = nn.Linear(ts_dim, d_model)
+        self.dropout = nn.Dropout(dropout)
 
-        self.fc = nn.Linear(d_model, d_model//2)
-        self.fc_out = nn.Linear(d_model // 2, ts_dim)
-
-        self.gsl = GSL(gsl_type='undirected', n_nodes=ts_dim, window_size=window_size, 
-                       alpha=gsl_alpha, k=gsl_k, device=device)
-        self.dropout = nn.Dropout(dropout*2)
-
-    
-    def forward(self, x):
-
-        B, T, ts_dim = x.size()
-        x_proj = self.input_proj(x)            # (B, window_size, d_model)
-        x_proj = x_proj + self.pos_embedding 
-        for layer in self.layers:
-            x_proj = layer(x_proj)               # (B, window_size, d_model)
-        transformer_feat = x_proj[:, -1, :]      # (B, d_model)
+        # GNN_TAM часть
+        self.n_gnn = n_gnn
+        self.gsl = nn.ModuleList()
+        self.conv1 = nn.ModuleList()
+        self.bnorm1 = nn.ModuleList()
+        self.conv2 = nn.ModuleList()
+        self.bnorm2 = nn.ModuleList()
+        self.z = (torch.ones(ts_dim, ts_dim) - torch.eye(ts_dim)).to(device)
         
-        idx = torch.arange(ts_dim, device=self.device)
-        # (ts_dim, ts_dim)
-        adj = self.gsl(idx)
-        # (B, ts_dim)
-        x_last = x[:, -1, :]
-        graph_feat = torch.matmul(x_last, adj)   # (B, ts_dim)
-        graph_feat = self.graph_proj(graph_feat)   # (B, d_model)
+        # for _ in range(n_gnn):
+        #     self.gsl.append(GSL(gsl_type='relu', 
+        #                         n_nodes=ts_dim, 
+        #                         window_size=window_size, 
+        #                         alpha=gsl_alpha, 
+        #                         k=gsl_k, 
+        #                         device=device))
+        #     self.conv1.append(GCLayer(window_size, n_hidden))
+        #     self.bnorm1.append(nn.BatchNorm1d(ts_dim))
+        #     self.conv2.append(GCLayer(n_hidden, n_hidden))
+        #     self.bnorm2.append(nn.BatchNorm1d(ts_dim))
 
+        combined_dim = d_model # + n_gnn * n_hidden
+        self.fc = nn.Linear(combined_dim, combined_dim//2)
+        self.fc_out = nn.Linear(combined_dim//2, ts_dim)
+
+    def forward(self, x):
+        B, T, N = x.size()
+        
+        x_proj = self.input_proj(x) + self.pos_embedding 
+        for layer in self.layers:
+            x_proj = layer(x_proj)
+        transformer_feat = x_proj[:, -1, :]  # (B, d_model)
         transformer_feat = self.dropout(transformer_feat)
-        graph_feat = self.dropout(graph_feat)
 
-        combined = torch.cat((transformer_feat, graph_feat), dim=-1)  # (B, 2*d_model)
-        out = self.fc(combined) # (B, d_model//2)
-        out = F.sigmoid(out)
-        out = self.fc_out(out) # (B, ts_dim)
+        #x_gnn = x.transpose(1, 2)  # (B, N, T)
+        #gnn_features = []
+        
+        # for i in range(self.n_gnn):
+        #     adj = self.gsl[i](torch.arange(N).to(self.device)) * self.z
+        #     h = self.conv1[i](adj, x_gnn).relu()
+        #     h = self.bnorm1[i](h)
+        #     skip, _ = torch.min(h, dim=1)
+        #     h = self.conv2[i](adj, h).relu()
+        #     h = self.bnorm2[i](h)
+        #     h, _ = torch.min(h, dim=1)
+        #     h += skip
+        #     gnn_features.append(h)
+        
+        #graph_feat = torch.cat(gnn_features, dim=1)  # (B, n_gnn*n_hidden)
+        #graph_feat = self.dropout(graph_feat)
+
+        #combined = torch.cat((transformer_feat, graph_feat), dim=-1)
+        combined = transformer_feat
+        
+        out = F.sigmoid(self.fc(combined))
+        out = self.fc_out(out)
         return out
