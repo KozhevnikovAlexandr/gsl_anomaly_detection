@@ -13,46 +13,36 @@ def test(model, test_dl, scaler, dataset_obj, threshold=None, use_threshold_from
     all_true_labels = []
 
     with torch.no_grad():
-        # Обрабатываем все батчи, кроме последнего
-        for i in range(len(test_dl) - 1):  # <- минус 1: пропускаем последний батч
+        for i in range(len(test_dl) - 1):
             ts_batch, _, target_batch = test_dl[i]
 
             pred = model(ts_batch)
 
-            # Денормализация
             target_raw = scaler.inverse_transform(target_batch.cpu().numpy())
             pred_raw = scaler.inverse_transform(pred.cpu().numpy())
 
-            # Вычисляем MAE
             errors = np.abs(target_raw - pred_raw).mean(axis=1)
             all_errors.extend(errors)
 
-            # Получаем индексы целевых точек
             batch_idx = test_dl.batch_seq[i]
             batch_end_idx = test_dl.batch_seq[i + 1]
             batch_window_end_indices = test_dl.window_end_indices[batch_idx:batch_end_idx]
             target_indices = test_dl.index[batch_window_end_indices + 1]
 
-            # Получаем метки
             true_labels = (dataset_obj.label.loc[target_indices] != 0).astype(int).values
             all_true_labels.extend(true_labels)
 
-    # Преобразуем в массивы
     all_errors = np.array(all_errors)
     all_true_labels = np.array(all_true_labels)
 
-    # Проверяем соответствие
     if len(all_errors) != len(all_true_labels):
         raise ValueError(f"Length mismatch: {len(all_errors)} errors vs {len(all_true_labels)} labels")
 
-    # Вычисляем порог
     if use_threshold_from_val or threshold is None:
         threshold = np.mean(all_errors) + 3 * np.std(all_errors)
 
-    # Формируем предсказания
     all_preds = (all_errors > threshold).astype(int)
 
-    # Вычисляем метрики
     metrics = {
         'accuracy': accuracy_score(all_true_labels, all_preds),
         'precision': precision_score(all_true_labels, all_preds, zero_division=0),

@@ -4,10 +4,6 @@ import pandas as pd
 import numpy as np
 
 class ForecastFDDDataloader:
-    """
-    Наследник FDDDataloader для прогнозирования следующего шага.
-    Исключает аномалии из тренировочной выборки, гарантируя целостность временного ряда.
-    """
     def __init__(
         self,
         dataframe: pd.DataFrame,
@@ -43,65 +39,47 @@ class ForecastFDDDataloader:
         self.dilation = dilation
         self.step_size = step_size
 
-        # Добавляем массив с run_id для каждого индекса
         self.run_ids_for_indices = dataframe.index.get_level_values(0).values
 
         window_end_indices = []
 
-        # Итерируем по всем run_id, включая те, где есть аномалии
         run_ids = dataframe.index.get_level_values(0).unique()
 
         for run_id in tqdm(run_ids, desc='Creating sequence of samples'):
-            # Получаем все индексы для данного run_id
             run_indices = np.array(dataframe.index.get_locs([run_id]))
-            # Ограничиваем, чтобы target_index (end+1) не вышел за границы
             run_indices = run_indices[run_indices < (len(dataframe) - 1)]
 
-            # Ограничиваем, чтобы хватило на window_size точек с учетом dilation
             valid_run_indices = []
             run_start = run_indices[0] if len(run_indices) > 0 else 0
             for end in run_indices:
                 start_index = end - (self.window_size - 1) * self.dilation
                 if start_index < run_start:
-                    continue  # окно выходит за начало run_id
+                    continue
                 valid_run_indices.append(end)
             run_indices = np.array(valid_run_indices)
 
-            # Применяем step_size
             if step_size > 0:
                 run_indices = run_indices[::step_size]
             else:
                 raise ValueError("``step_size`` must be greater than zero.")
 
-            # Проверяем каждое окно на соответствие всем условиям
             valid_ends = []
             for end in run_indices:
-                # Формируем window_indices
                 window_indices = end - np.arange(0, self.window_size, self.dilation)[::-1]
-
-                # Проверяем выход за границы dataframe
                 if any(window_indices < 0) or any(window_indices >= len(dataframe)):
                     continue
-
-                # Проверяем принадлежность к текущему run_id
                 current_run_ids = self.run_ids_for_indices[window_indices]
                 if (current_run_ids != run_id).any():
                     continue
-
-                # Проверяем mask для всех точек в окне
                 if not mask.iloc[window_indices].all():
                     continue
-
-                # Проверяем целевую точку (end + 1)
                 target_index = end + 1
                 if not mask.iloc[target_index]:
                     continue
-
                 valid_ends.append(end)
 
             window_end_indices.extend(valid_ends)
 
-        # Перемешиваем, если нужно
         if random_state is not None:
             np.random.seed(random_state)
         self.window_end_indices = np.random.permutation(window_end_indices) if shuffle else np.array(window_end_indices)
@@ -116,7 +94,6 @@ class ForecastFDDDataloader:
             self.batch_seq = np.array([0, n_samples])
             self.n_batches = 1
 
-        # Преобразуем в тензоры, если указано
         if data_framework == 'torch':
             self.df_values = torch.tensor(self.df_values, device=device, dtype=torch.float32)
             self.batch_seq = torch.tensor(self.batch_seq, device=device, dtype=torch.long)
