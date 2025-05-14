@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from gsl import GSL
+import math  # Для расчёта позиционного кодирования
 
 class GCLayer(nn.Module):
     """
@@ -90,8 +91,18 @@ class TimeSeriesTransformerGSL(nn.Module):
         self.window_size = window_size
         self.device = device
         
+        # Input projection
         self.input_proj = nn.Linear(ts_dim, d_model)
-        self.pos_embedding = nn.Parameter(torch.zeros(1, window_size, d_model))
+        
+        # Fixed positional encoding based on sinusoids and cosinusoids
+        pe = torch.zeros(1, window_size, d_model)
+        position = torch.arange(0, window_size).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
+        pe[0, :, 0::2] = torch.sin(position * div_term)
+        pe[0, :, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
+        
+        # Transformer layers
         self.layers = nn.ModuleList([
             TransformerBlock(d_model, nhead, dim_feedforward, dropout)
             for _ in range(num_layers)
@@ -126,10 +137,12 @@ class TimeSeriesTransformerGSL(nn.Module):
     def forward(self, x):
         B, T, N = x.size()
         
-        x_proj = self.input_proj(x) + self.pos_embedding 
+        x_proj = self.input_proj(x) + self.pe[:, :T, :]
+        
         for layer in self.layers:
             x_proj = layer(x_proj)
-        transformer_feat = x_proj[:, -1, :]  # (B, d_model)
+        
+        transformer_feat = x_proj.mean(dim=1)  # (B, d_model)
         transformer_feat = self.dropout(transformer_feat)
 
         x_gnn = x.transpose(1, 2)  # (B, N, T)
