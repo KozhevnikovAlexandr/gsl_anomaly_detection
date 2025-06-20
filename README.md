@@ -33,7 +33,7 @@ Most of the baselines are taken from iADCPS: Time Series Anomaly Detection for E
 
 Ablation study:
 
-|             Method           |      SWaT                   |      WADI                   |
+|             Method           |      SWaT    |              |      WADI     |             |
 |:---------------------------:|:-------------:|:------------:|:-------------:|:-------------:|
 |                             |       MAE     |     SMAPE    |       MAE     |      SMAPE    |
 |        Method               |     0.0154    |     3.05%    |     0.0354    |     22.44%    |
