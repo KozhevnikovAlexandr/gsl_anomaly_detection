@@ -4,7 +4,7 @@ The model utilizes unsupervised pre-training to predict time series values. The 
 Training Process
 
     Pre-training: An initial model is trained using unsupervised techniques.
-    Fine-tuning: The pre-trained model is then used to train a CatBoost model on a small, randomly selected dataset from the validation sample.
+    Fine-tuning: The pre-trained model is then used to train a CatBoost model on a small, randomly selected dataset from the validation set.
     Validation: The validation set is derived from the initial days of the test sample.
     Data Augmentation: The data undergoes augmentation to enhance training effectiveness.
     Label Usage: Less than 1% of the available labels are utilized in the training process.
