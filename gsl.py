@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-# A = ReLu(W)
 class Graph_ReLu_W(nn.Module):
     def __init__(self, n_nodes, k, device='cpu'):
         super(Graph_ReLu_W, self).__init__()
